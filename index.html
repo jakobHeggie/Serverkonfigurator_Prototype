@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Serverkonfigurator</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="style.css">
+    <link rel="icon" href="images/favicon.png" type="image/x-icon">
+</head>
+<body>
+    <div class="selection-container">
+        <div>
+            <img src="images/ram.jpg" alt="RAM">
+            <label for="ramCount">number of ram modules:</label>
+            <select id="ramCount">
+                <!-- Options will be added via JavaScript -->
+            </select>
+        </div>
+        <div>
+            <img src="images/tray.jpg" alt="Tray">
+            <label for="trayCount">number of trays:</label>
+            <select id="trayCount">
+                <!-- Options will be added via JavaScript -->
+            </select>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "../build/three.module.js",
+                "three/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module" src="script.js"></script>
+</body>
+</html>
