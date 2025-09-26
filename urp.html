@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Three.js URP-like Scene</title>
+<style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+</style>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/controls/OrbitControls.js';
+
+// Scene & Renderer
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x202025);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.8; // weniger hell
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.appendChild(renderer.domElement);
+
+// Camera & Controls
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(5, 3, 5);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// Licht (leicht reduziert)
+const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+dirLight.position.set(5, 10, 5);
+scene.add(dirLight);
+
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.3);
+scene.add(hemiLight);
+
+// Boden
+const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(50, 50),
+    new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.7, metalness: 0.1 })
+);
+ground.rotation.x = - Math.PI / 2;
+scene.add(ground);
+
+// Objekte – URP-Style Materialien
+function createPBRBox(x, y, z, color) {
+    return new THREE.Mesh(
+        new THREE.BoxGeometry(1,1,1),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3 })
+    );
+}
+
+const box1 = createPBRBox(0, 0.5, 0, 0xff5555);
+scene.add(box1);
+
+const box2 = createPBRBox(2, 0.5, 1, 0x55ff55);
+scene.add(box2);
+
+const box3 = createPBRBox(-2, 0.5, -1, 0x5555ff);
+scene.add(box3);
+
+// Resize
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Animation
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>

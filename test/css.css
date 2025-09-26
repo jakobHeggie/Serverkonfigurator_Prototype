@@ -1,0 +1,9 @@
+body { 
+  margin: 0; 
+  background-color: #1c253c;
+}
+#canvas-container { 
+  position:fixed;
+  width: 100%; 
+  height: 100%;
+}

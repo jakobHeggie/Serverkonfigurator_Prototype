@@ -3,26 +3,34 @@
 <head>
     <title>Serverkonfigurator</title>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link type="text/css" rel="stylesheet" href="style.css">
     <link rel="icon" href="images/favicon.png" type="image/x-icon">
 </head>
 <body>
-    <div class="selection-container">
-        <div>
-            <img src="images/ram.jpg" alt="RAM">
-            <label for="ramCount">Number of RAM Modules:</label>
-            <select id="ramCount">
-                <!-- Options will be added via JavaScript -->
-            </select>
+    <div id="container">
+        <div id="ui">
+            <div class="selection-container">
+                <div>
+                    <img src="images/ram.jpg" alt="RAM">
+                    <label for="ramCount">Number of RAM Modules:</label>
+                    <select id="ramCount"></select>
+                </div>
+                <div>
+                    <img src="images/tray.jpg" alt="Tray">
+                    <label for="trayCount">Number of Trays:</label>
+                    <select id="trayCount"></select>
+                </div>
+                <div>
+                    <img src="images/cube.png" alt="Cube">
+                    <label for="cubeSelect">Select Test Cube:</label>
+                    <select id="cubeSelect">
+                        <option value="">-- Select Cube --</option>
+                    </select>
+                </div>
+            </div>
         </div>
-        <div>
-            <img src="images/tray.jpg" alt="Tray">
-            <label for="trayCount">Number of Trays:</label>
-            <select id="trayCount">
-                <!-- Options will be added via JavaScript -->
-            </select>
-        </div>
+        <div id="scene-container"></div>
     </div>
 
     <script type="importmap">
