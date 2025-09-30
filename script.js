@@ -138,7 +138,7 @@ function init() {
                 // PSU Label
                 if (child.name === 'PSU000_1') createLabelForPSU(child);
                 // PERC Label
-                if (child.name === 'PERC') createLabelForPERC(child);
+                if (child.name === 'PERCDUMMY') createLabelForPERC(child);
             }
         });
 
@@ -191,6 +191,10 @@ function init() {
 
     renderer.setAnimationLoop(animate);
     createLabelForRAMAtOrigin();
+
+    const storageLabelObject = createLabelForStorage();
+    scene.add(storageLabelObject);
+    storageLabelObject.position.set(0, 0, .2); // beliebige Position
 }
 
 // --- Labels ---
@@ -251,6 +255,42 @@ function createLabelForPSU(object) {
     object.add(label);
 }
 
+function createLabelForStorage() {
+  const emptyObject = new THREE.Object3D();
+
+    // Label-Div erstellen
+    const div = document.createElement('div');
+    div.className = 'label';
+    div.textContent = 'Storage';
+    div.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    div.style.color = 'white';
+    div.style.padding = '4px 8px';
+    div.style.borderRadius = '8px';
+    div.style.fontSize = '12px';
+    div.style.position = 'relative';
+
+    // Pfeil hinzufügen
+    const arrow = document.createElement('div');
+    arrow.style.position = 'absolute';
+    arrow.style.bottom = '-6px';
+    arrow.style.left = '50%';
+    arrow.style.transform = 'translateX(-50%)';
+    arrow.style.width = '0';
+    arrow.style.height = '0';
+    arrow.style.borderLeft = '6px solid transparent';
+    arrow.style.borderRight = '6px solid transparent';
+    arrow.style.borderTop = '6px solid rgba(0,0,0,0.7)';
+    div.appendChild(arrow);
+
+    // CSS2DObject erstellen und an leeres Objekt binden
+    const label = new CSS2DObject(div);
+    label.position.set(0, 0.05, 0);
+    emptyObject.add(label);
+
+    // Das leere Objekt zurückgeben, damit man es in die Szene setzen kann
+    return emptyObject;
+}
+
 // --- PERC Label immer sichtbar ---
 function createLabelForPERC(object) {
     const div = document.createElement('div');
@@ -265,6 +305,7 @@ function createLabelForPERC(object) {
     div.style.fontSize = '12px';
     div.style.position = 'relative';
 
+    // Warnung
     const warning = document.createElement('div');
     warning.textContent = '!';
     warning.style.backgroundColor = 'red';
@@ -276,33 +317,36 @@ function createLabelForPERC(object) {
     warning.style.display = 'flex';
     warning.style.alignItems = 'center';
     warning.style.justifyContent = 'center';
-    warning.style.marginRight = '4px'; // neben Text
+    warning.style.marginBottom = '4px';
     div.appendChild(warning);
 
+    // Text
     const text = document.createElement('span');
-    text.textContent = 'PERC Controller'; // wird beim Laden aktualisiert
+    text.textContent = 'Kein PERC ausgewählt'; // Default Text
     div.appendChild(text);
 
+    // Spinner
     const spinner = document.createElement('div');
     spinner.style.border = '3px solid rgba(255,255,255,0.3)';
     spinner.style.borderTop = '3px solid white';
     spinner.style.borderRadius = '50%';
     spinner.style.width = '12px';
     spinner.style.height = '12px';
-    spinner.style.marginLeft = '4px'; // neben Text
+    spinner.style.marginTop = '4px';
     spinner.style.animation = 'spin 1s linear infinite';
     spinner.style.display = 'none';
     div.appendChild(spinner);
 
+    // Label Object in Szene
     const labelObject = new THREE.Object3D();
     labelObject.position.set(.08, .015, -.09);
-    scene.add(labelObject); // Label hängt direkt an Szene, nicht am Dummy
+    scene.add(labelObject);
 
     const label = new CSS2DObject(div);
-    label.position.set(0, 0.01, 0); // leicht über dem Objekt
+    label.position.set(0, 0.01, 0);
     labelObject.add(label);
 
-    percLabel = { label, text, spinner, parent: labelObject };
+    percLabel = { label, text, spinner, warning, parent: labelObject };
 }
 
 // --- Pointer Event ---
@@ -380,15 +424,27 @@ function populateTrayDropdown(id, max) {
     select.value = 0;
 }
 
-function populateDropdown(id, max, step, skipZeroOption = false) {
+function populateDropdown(id) {
     const select = document.getElementById(id);
     select.innerHTML = '';
-    for (let i = skipZeroOption ? 0 : 1; i <= max; i += step) {
+
+    // Kein PERC
+    const noneOption = document.createElement('option');
+    noneOption.value = '';
+    noneOption.textContent = 'Kein PERC';
+    select.appendChild(noneOption);
+
+    // PERC Optionen
+    const percs = ['H330', 'H730'];
+    percs.forEach(name => {
         const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = i;
+        opt.value = name;
+        opt.textContent = name;
         select.appendChild(opt);
-    }
+    });
+
+    // Default: Kein PERC
+    select.value = '';
 }
 
 // --- RAM Animation ---
@@ -494,13 +550,8 @@ function animate(time) {
 // --- Perc Loader ---
 function loadPerc(e) {
     const percIndex = e.target.value;
-    if (!percIndex) return;
-
-    const dummyPerc = scene.getObjectByName('PERC');
-    if (!dummyPerc) {
-        console.warn('Kein Dummy-PERC gefunden!');
-        return;
-    }
+    const dummyPerc = scene.getObjectByName('PERCDUMMY');
+    if (!dummyPerc) return;
 
     if (currentPerc) {
         scene.remove(currentPerc);
@@ -516,10 +567,22 @@ function loadPerc(e) {
         currentPerc = null;
     }
 
-    dummyPerc.visible = true;
+    if (!percIndex) {
+        // Kein PERC ausgewählt
+        dummyPerc.visible = true;
+        if (percLabel) {
+            percLabel.spinner.style.display = 'none';
+            percLabel.warning.style.display = 'flex'; // Warnung sichtbar
+            percLabel.text.textContent = 'Kein PERC ausgewählt';
+        }
+        return;
+    }
 
+    // PERC laden
+    dummyPerc.visible = false;
     if (percLabel) {
         percLabel.spinner.style.display = 'block';
+        percLabel.warning.style.display = 'none'; // Warnung ausblenden
         percLabel.text.textContent = `PERC Controller ${percIndex}`;
     }
 
@@ -540,18 +603,20 @@ function loadPerc(e) {
             }
         });
 
-        dummyPerc.visible = false;
-
-        if (percLabel) percLabel.spinner.style.display = 'none';
-
         currentPerc = perc;
         scene.add(perc);
+
+        if (percLabel) percLabel.spinner.style.display = 'none';
     }, undefined, error => {
         console.error('Fehler beim Laden des Perc:', error);
-        if (percLabel) percLabel.spinner.style.display = 'none';
+        if (percLabel) {
+            percLabel.spinner.style.display = 'none';
+            percLabel.warning.style.display = 'flex';
+            percLabel.text.textContent = 'Fehler beim Laden';
+        }
+        dummyPerc.visible = true;
     });
 }
-
 // --- CSS Spinner Keyframes ---
 const style = document.createElement('style');
 style.innerHTML = `
