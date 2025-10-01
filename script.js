@@ -28,6 +28,8 @@ let cameraAnimation = null;
 let percLabel = null;
 let ramLabelObject = null; // global
 
+let currentTextCube = null;
+
 init();
 
 function init() {
@@ -199,26 +201,49 @@ function init() {
     const storageLabelObject = createLabelForStorage();
     scene.add(storageLabelObject);
     storageLabelObject.position.set(0, 0, .2); // beliebige Position
+
+// Dropdown für CPU
+document.getElementById('cpuSelect').addEventListener('change', (e) => {
+    const cpuName = e.target.value;
+    if (!cpuName) return;
+    onCpuSelect(cpuName);
+});
 }
+
 function createTextCube(text, width = 0.5, height = 0.2, depth = 0.3) {
     const geometry = new THREE.BoxGeometry(width, height, depth);
 
-    // Canvas für Text
+    // Falls "Intel Xeon" vorkommt → Zeilenumbruch hinzufügen
+    if (text.includes("Intel Xeon")) {
+        text = text.replace("Intel Xeon", "Intel Xeon\n");
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 128;
     const ctx = canvas.getContext('2d');
+
+    // Hintergrund
     ctx.fillStyle = 'rgba(136,136,136,1)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Text-Einstellungen
     ctx.fillStyle = 'white';
-    ctx.font = 'bold 48px Arial';
+    ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+    // Mehrzeiligen Text zeichnen
+    const lines = text.split("\n");
+    const lineHeight = 34;
+    const centerY = canvas.height / 2 - ((lines.length - 1) * lineHeight) / 2;
+
+    lines.forEach((line, i) => {
+        ctx.fillText(line, canvas.width / 2, centerY + i * lineHeight);
+    });
 
     const texture = new THREE.CanvasTexture(canvas);
 
-    // Material nur vorne mit Text, restliche Seiten grau
     const materials = [
         new THREE.MeshPhongMaterial({ color: 0x444444 }), // rechts
         new THREE.MeshPhongMaterial({ color: 0x444444 }), // links
@@ -228,8 +253,62 @@ function createTextCube(text, width = 0.5, height = 0.2, depth = 0.3) {
         new THREE.MeshPhongMaterial({ color: 0x444444 })  // hinten
     ];
 
-    const cube = new THREE.Mesh(geometry, materials);
-    return cube;
+    return new THREE.Mesh(geometry, materials);
+}
+
+function onCpuSelect(cpuName) {
+    console.log("CPU ausgewählt:", cpuName);
+
+    // Wenn bereits ein TextCube existiert, entfernen
+    if (currentTextCube) {
+        scene.remove(currentTextCube);
+        if (currentTextCube.material) {
+            currentTextCube.material.forEach(mat => {
+                if (mat.map) mat.map.dispose();
+                mat.dispose();
+            });
+        }
+        currentTextCube.geometry.dispose();
+        currentTextCube = null;
+    }
+const heatsinks = [];
+    scene.traverse(obj => {
+        if (obj.name.startsWith('Heatsinks') && obj.isMesh) {
+            heatsinks.push(obj);
+            // Material transparent machen
+            if (obj.material) {
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach(m => {
+                        m.transparent = true;
+                        m.opacity = 0.1;
+                    });
+                } else {
+                    obj.material.transparent = true;
+                    obj.material.opacity = 0.1;
+                }
+            }
+
+
+                const bbox = new THREE.Box3().setFromObject(obj);
+            // Bounding Box berechnen
+            const max = bbox.max;
+            const min = bbox.min;
+
+            const textCube = createTextCube(cpuName);
+
+            textCube.rotation.x = -Math.PI / 2; 
+            textCube.position.set(
+                -.070,
+                max.y + 0.0005, 
+                (min.z + max.z) / 2
+            );
+            
+            // Größe anpassen
+            textCube.scale.set(0.05, 0.1, 0.01);
+            
+            scene.add(textCube);
+                    }
+    });
 }
 
 function onCpuClick() {
@@ -250,60 +329,56 @@ function onCpuClick() {
                 }
             }
 
-// Bounding Box berechnen
-const bbox = new THREE.Box3().setFromObject(obj);
-const min = bbox.min;
-const max = bbox.max;
+            const bbox = new THREE.Box3().setFromObject(obj);
+            // Bounding Box berechnen
+            const max = bbox.max;
+            const min = bbox.min;
 
-// Text-Cube erstellen
-const textCube = createTextCube("Xeon E5");
+            const textCube = createTextCube("Xeon E5");
 
-// Rotation, damit die Oberseite nach oben zeigt
-// Standard: Y = Höhe, X/Z = Fläche
-textCube.rotation.x = -Math.PI / 2; // dreht den Text so, dass er "flach oben" liegt
+            textCube.rotation.x = -Math.PI / 2; 
+            textCube.position.set(
+                -.070,
+                max.y + 0.000025, 
+                (min.z + max.z) / 2
+            );
 
-// Position: mittig über der Box
-textCube.position.set(
-    -.070,
-    max.y + 0.0005,  // leicht über Oberkante
-    (min.z + max.z) / 2
-);
-
-// Größe anpassen
-textCube.scale.set(0.05, 0.1, 0.01);
-
-scene.add(textCube);
-
+            // Größe anpassen
+            textCube.scale.set(0.05, 0.1, 0.01);
+            
+            scene.add(textCube);
+            
         }
     });
-
+    
     if (heatsinks.length === 0) return;
-
+    
     // Berechne die zentrale Position aller Heatsinks
     const center = new THREE.Vector3();
     heatsinks.forEach(h => center.add(h.getWorldPosition(new THREE.Vector3())));
     center.divideScalar(heatsinks.length);
-
+    
     // Kamera Zielposition direkt über die Heatsinks
     const targetHeight = 0.25; 
     const targetPosition = center.clone();
     targetPosition.y += targetHeight;
-
+    
     const startPosition = camera.position.clone();
     const duration = 1.5;
     let elapsed = 0;
-
+    
     cameraAnimation = (delta) => {
         elapsed += delta;
         const t = Math.min(elapsed / duration, 1);
         const ease = t * t * (3 - 2 * t); // Smoothstep
-
+        
         camera.position.lerpVectors(startPosition, targetPosition, ease);
         camera.lookAt(center);
-
+        
         if (t >= 1) cameraAnimation = null;
     };
 }
+    
 
 // --- Labels ---
 function createLabelForRAMAtOrigin() {
