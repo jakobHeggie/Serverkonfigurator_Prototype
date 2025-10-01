@@ -26,6 +26,7 @@ let cameraAnimation = null;
 
 // --- PERC Label ---
 let percLabel = null;
+let ramLabelObject = null; // global
 
 init();
 
@@ -175,7 +176,10 @@ function init() {
                 if (psu) {
                     onPSUClick(psu);
                 }
-            }
+            }else if (event.code === 'KeyC') 
+                {
+                    onCpuClick();
+                 }
         });
     });
 
@@ -196,6 +200,110 @@ function init() {
     scene.add(storageLabelObject);
     storageLabelObject.position.set(0, 0, .2); // beliebige Position
 }
+function createTextCube(text, width = 0.5, height = 0.2, depth = 0.3) {
+    const geometry = new THREE.BoxGeometry(width, height, depth);
+
+    // Canvas für Text
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(136,136,136,1)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+
+    // Material nur vorne mit Text, restliche Seiten grau
+    const materials = [
+        new THREE.MeshPhongMaterial({ color: 0x444444 }), // rechts
+        new THREE.MeshPhongMaterial({ color: 0x444444 }), // links
+        new THREE.MeshPhongMaterial({ color: 0x444444 }), // oben
+        new THREE.MeshPhongMaterial({ color: 0x444444 }), // unten
+        new THREE.MeshPhongMaterial({ map: texture }),   // vorne
+        new THREE.MeshPhongMaterial({ color: 0x444444 })  // hinten
+    ];
+
+    const cube = new THREE.Mesh(geometry, materials);
+    return cube;
+}
+
+function onCpuClick() {
+    const heatsinks = [];
+    scene.traverse(obj => {
+        if (obj.name.startsWith('Heatsinks') && obj.isMesh) {
+            heatsinks.push(obj);
+            // Material transparent machen
+            if (obj.material) {
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach(m => {
+                        m.transparent = true;
+                        m.opacity = 0.1;
+                    });
+                } else {
+                    obj.material.transparent = true;
+                    obj.material.opacity = 0.1;
+                }
+            }
+
+// Bounding Box berechnen
+const bbox = new THREE.Box3().setFromObject(obj);
+const min = bbox.min;
+const max = bbox.max;
+
+// Text-Cube erstellen
+const textCube = createTextCube("Xeon E5");
+
+// Rotation, damit die Oberseite nach oben zeigt
+// Standard: Y = Höhe, X/Z = Fläche
+textCube.rotation.x = -Math.PI / 2; // dreht den Text so, dass er "flach oben" liegt
+
+// Position: mittig über der Box
+textCube.position.set(
+    -.070,
+    max.y + 0.0005,  // leicht über Oberkante
+    (min.z + max.z) / 2
+);
+
+// Größe anpassen
+textCube.scale.set(0.05, 0.1, 0.01);
+
+scene.add(textCube);
+
+        }
+    });
+
+    if (heatsinks.length === 0) return;
+
+    // Berechne die zentrale Position aller Heatsinks
+    const center = new THREE.Vector3();
+    heatsinks.forEach(h => center.add(h.getWorldPosition(new THREE.Vector3())));
+    center.divideScalar(heatsinks.length);
+
+    // Kamera Zielposition direkt über die Heatsinks
+    const targetHeight = 0.25; 
+    const targetPosition = center.clone();
+    targetPosition.y += targetHeight;
+
+    const startPosition = camera.position.clone();
+    const duration = 1.5;
+    let elapsed = 0;
+
+    cameraAnimation = (delta) => {
+        elapsed += delta;
+        const t = Math.min(elapsed / duration, 1);
+        const ease = t * t * (3 - 2 * t); // Smoothstep
+
+        camera.position.lerpVectors(startPosition, targetPosition, ease);
+        camera.lookAt(center);
+
+        if (t >= 1) cameraAnimation = null;
+    };
+}
 
 // --- Labels ---
 function createLabelForRAMAtOrigin() {
@@ -203,7 +311,7 @@ function createLabelForRAMAtOrigin() {
     div.className = 'label';
     div.textContent = 'RAM\n64GB DDR4 (4x 16GB DIMM)';
     div.style.whiteSpace = 'pre';
-    div.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    div.style.backgroundColor = 'rgba(0,0,0,0.7)'; // Standardfarbe
     div.style.color = 'white';
     div.style.padding = '4px 8px';
     div.style.borderRadius = '8px';
@@ -225,6 +333,8 @@ function createLabelForRAMAtOrigin() {
     const label = new CSS2DObject(div);
     label.position.set(0, .01, 0);
     scene.add(label);
+
+    ramLabelObject = div; // speichern für spätere Farbänderung
 }
 
 function createLabelForPSU(object) {
@@ -358,6 +468,11 @@ function onPointerDown(event) {
     const intersects = raycaster.intersectObjects(triggers, true);
     if (intersects.length > 0) {
         ramBlinking = true;
+        // Labelfarbe ändern, wenn irgendeine Gruppe aktiv ist
+        console.log(ramLabelObject);
+        if (ramLabelObject) {
+            ramLabelObject.style.backgroundColor = 'rgb(248, 154, 75)'; // : 'rgba(0,0,0,0.7)';
+        }
     }
 
     const psu = scene.getObjectByName('PSU000_1');
