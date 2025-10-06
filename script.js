@@ -30,6 +30,21 @@ let ramLabelObject = null; // global
 
 let currentTextCube = null;
 
+let pointerDown = false;
+let pointerDownPos = { x: 0, y: 0 };
+let pointerDownTime = 0;
+let pointerMoved = false;
+const moveThreshold = 5; // Pixel: ab hier gilt es als Drag (Kamera)
+const shortPressThreshold = 250; // ms: kurze Press -> Auswahl
+
+// --- Blinking Materials ---
+const blinkingMaterials = []; // Materialien, die blinken sollen
+const blinkingConfig = {
+    speed: 2.0,        // Puls-Frequenz (höher = schneller)
+    amplitude: 0.8,    // Stärke des Pulses (0..1)
+    baseMultiplier: 0.6 // Multiplikator für die Basis-EmissiveIntensity (falls keine userData vorhanden)
+};
+
 init();
 
 function init() {
@@ -52,6 +67,11 @@ function init() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.getElementById('scene-container').appendChild(renderer.domElement);
+
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
 
     // Label Renderer
     labelRenderer = new CSS2DRenderer();
@@ -145,6 +165,10 @@ function init() {
             }
         });
 
+        // Nach dem Traversal: suche Material.017 und starte das Blinken
+        collectAndStartBlinkingByName(object, 'Material.017');
+        collectAndStartBlinkingByName(object, 'Material.029');
+
         scene.add(object);
 
         // Animationen starten
@@ -171,17 +195,16 @@ function init() {
         document.getElementById('percSelect').addEventListener('change', loadPerc);
 
         window.addEventListener('pointerdown', onPointerDown);
-    
+
         window.addEventListener('keydown', (event) => {
             if (event.code === 'Space') { // Leertaste
                 const psu = scene.getObjectByName('PSU000_1');
                 if (psu) {
                     onPSUClick(psu);
                 }
-            }else if (event.code === 'KeyC') 
-                {
-                    onCpuClick();
-                 }
+            } else if (event.code === 'KeyC') {
+                onCpuClick();
+            }
         });
     });
 
@@ -202,12 +225,12 @@ function init() {
     scene.add(storageLabelObject);
     storageLabelObject.position.set(0, 0, .2); // beliebige Position
 
-// Dropdown für CPU
-document.getElementById('cpuSelect').addEventListener('change', (e) => {
-    const cpuName = e.target.value;
-    if (!cpuName) return;
-    onCpuSelect(cpuName);
-});
+    // Dropdown für CPU
+    document.getElementById('cpuSelect').addEventListener('change', (e) => {
+        const cpuName = e.target.value;
+        if (!cpuName) return;
+        onCpuSelect(cpuName);
+    });
 }
 
 function createTextCube(text, width = 0.5, height = 0.2, depth = 0.3) {
@@ -271,7 +294,7 @@ function onCpuSelect(cpuName) {
         currentTextCube.geometry.dispose();
         currentTextCube = null;
     }
-const heatsinks = [];
+    const heatsinks = [];
     scene.traverse(obj => {
         if (obj.name.startsWith('Heatsinks') && obj.isMesh) {
             heatsinks.push(obj);
@@ -288,26 +311,25 @@ const heatsinks = [];
                 }
             }
 
-
-                const bbox = new THREE.Box3().setFromObject(obj);
+            const bbox = new THREE.Box3().setFromObject(obj);
             // Bounding Box berechnen
             const max = bbox.max;
             const min = bbox.min;
 
             const textCube = createTextCube(cpuName);
 
-            textCube.rotation.x = -Math.PI / 2; 
+            textCube.rotation.x = -Math.PI / 2;
             textCube.position.set(
                 -.070,
-                max.y + 0.0005, 
+                max.y + 0.0005,
                 (min.z + max.z) / 2
             );
-            
+
             // Größe anpassen
             textCube.scale.set(0.05, 0.1, 0.01);
-            
+
             scene.add(textCube);
-                    }
+        }
     });
 }
 
@@ -336,49 +358,47 @@ function onCpuClick() {
 
             const textCube = createTextCube("Xeon E5");
 
-            textCube.rotation.x = -Math.PI / 2; 
+            textCube.rotation.x = -Math.PI / 2;
             textCube.position.set(
                 -.070,
-                max.y + 0.000025, 
+                max.y + 0.000025,
                 (min.z + max.z) / 2
             );
 
             // Größe anpassen
             textCube.scale.set(0.05, 0.1, 0.01);
-            
+
             scene.add(textCube);
-            
         }
     });
-    
+
     if (heatsinks.length === 0) return;
-    
+
     // Berechne die zentrale Position aller Heatsinks
     const center = new THREE.Vector3();
     heatsinks.forEach(h => center.add(h.getWorldPosition(new THREE.Vector3())));
     center.divideScalar(heatsinks.length);
-    
+
     // Kamera Zielposition direkt über die Heatsinks
-    const targetHeight = 0.25; 
+    const targetHeight = 0.25;
     const targetPosition = center.clone();
     targetPosition.y += targetHeight;
-    
+
     const startPosition = camera.position.clone();
     const duration = 1.5;
     let elapsed = 0;
-    
+
     cameraAnimation = (delta) => {
         elapsed += delta;
         const t = Math.min(elapsed / duration, 1);
         const ease = t * t * (3 - 2 * t); // Smoothstep
-        
+
         camera.position.lerpVectors(startPosition, targetPosition, ease);
         camera.lookAt(center);
-        
+
         if (t >= 1) cameraAnimation = null;
     };
 }
-    
 
 // --- Labels ---
 function createLabelForRAMAtOrigin() {
@@ -441,7 +461,7 @@ function createLabelForPSU(object) {
 }
 
 function createLabelForStorage() {
-  const emptyObject = new THREE.Object3D();
+    const emptyObject = new THREE.Object3D();
 
     // Label-Div erstellen
     const div = document.createElement('div');
@@ -536,27 +556,88 @@ function createLabelForPERC(object) {
 
 // --- Pointer Event ---
 function onPointerDown(event) {
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
+    // Pointer nur im rendering-canvas verfolgen (falls nötig)
+    pointerDown = true;
+    pointerMoved = false;
+    pointerDownTime = performance.now();
+    pointerDownPos.x = event.clientX;
+    pointerDownPos.y = event.clientY;
 
-    const intersects = raycaster.intersectObjects(triggers, true);
-    if (intersects.length > 0) {
-        ramBlinking = true;
-        // Labelfarbe ändern, wenn irgendeine Gruppe aktiv ist
-        console.log(ramLabelObject);
-        if (ramLabelObject) {
-            ramLabelObject.style.backgroundColor = 'rgb(248, 154, 75)'; // : 'rgba(0,0,0,0.7)';
+    // optional: Pointer Capture um Move/Up zuverlässig zu bekommen
+    try {
+        if (event.target && event.target.setPointerCapture) {
+            event.target.setPointerCapture(event.pointerId);
         }
+    } catch (e) {
+        // ignore
+    }
+}
+
+function onPointerMove(event) {
+    if (!pointerDown) return;
+
+    const dx = event.clientX - pointerDownPos.x;
+    const dy = event.clientY - pointerDownPos.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > moveThreshold) {
+        pointerMoved = true;
+    }
+}
+
+function onPointerUp(event) {
+    if (!pointerDown) return;
+    pointerDown = false;
+
+    // Release Pointer Capture
+    try {
+        if (event.target && event.target.releasePointerCapture) {
+            event.target.releasePointerCapture(event.pointerId);
+        }
+    } catch (e) {
+        // ignore
     }
 
-    const psu = scene.getObjectByName('PSU000_1');
-    if (psu) {
-        const psuIntersects = raycaster.intersectObject(psu, true);
-        if (psuIntersects.length > 0) {
-            onPSUClick(psuIntersects[0].object);
+    const duration = performance.now() - pointerDownTime;
+    const isShortPress = duration < shortPressThreshold;
+    const isSmallMove = !pointerMoved;
+
+    // Wenn kurze Press ODER kaum Bewegung -> Auswahl behandeln
+    if (isShortPress || isSmallMove) {
+        // Normierte Maus-Koordinaten relativ zum Renderer-Canvas:
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        // RAM-Trigger prüfen
+        const intersects = raycaster.intersectObjects(triggers, true);
+        if (intersects.length > 0) {
+            // Auswahl bestätigt — RAM-Blinken starten (wie zuvor)
+            ramBlinking = true;
+            if (ramLabelObject) {
+                ramLabelObject.style.backgroundColor = 'rgb(248, 154, 75)';
+            }
+            // optional: du kannst hier noch weitere Logiken ergänzen,
+            // z.B. welche RAM-Gruppe genau ausgewählt wurde oder Toggle-Verhalten
         }
+
+        // PSU prüfen (falls du PSU per Klick aktivieren willst)
+        const psu = scene.getObjectByName('PSU000_1');
+        if (psu) {
+            const psuIntersects = raycaster.intersectObject(psu, true);
+            if (psuIntersects.length > 0) {
+                onPSUClick(psuIntersects[0].object);
+            }
+        }
+    } else {
+        // Wahrscheinlich Kameradreh: nichts tun (OrbitControls macht seine Arbeit)
     }
+}
+
+function onPointerCancel(event) {
+    // Falls Pointer abgebrochen wurde
+    pointerDown = false;
+    pointerMoved = false;
 }
 
 // --- PSU Kamera Animation ---
@@ -625,7 +706,7 @@ function populateDropdown(id) {
     select.appendChild(noneOption);
 
     // PERC Optionen
-    const percs = ['H330', 'H730'];
+    const percs = ['H330', 'H730', 'SPHERE'];
     percs.forEach(name => {
         const opt = document.createElement('option');
         opt.value = name;
@@ -678,12 +759,18 @@ function updateVisibility(groups, count) {
 function makeEmissive(material) {
     if (Array.isArray(material)) {
         material.forEach(m => {
-            m.emissive = m.color.clone();
-            m.emissiveIntensity = 0.6;
+            if (!m.userData) m.userData = {};
+            // setze baseEmissive wenn noch nicht gesetzt
+            if (!m.userData.baseEmissive) m.userData.baseEmissive = (m.color ? m.color.clone() : new THREE.Color(0x000000));
+            // setze emissive und eine moderate emissiveIntensity
+            m.emissive = m.userData.baseEmissive.clone();
+            if (typeof m.emissiveIntensity === 'undefined') m.emissiveIntensity = blinkingConfig.baseMultiplier;
         });
     } else {
-        material.emissive = material.color.clone();
-        material.emissiveIntensity = 0.6;
+        if (!material.userData) material.userData = {};
+        if (!material.userData.baseEmissive) material.userData.baseEmissive = (material.color ? material.color.clone() : new THREE.Color(0x000000));
+        material.emissive = material.userData.baseEmissive.clone();
+        if (typeof material.emissiveIntensity === 'undefined') material.emissiveIntensity = blinkingConfig.baseMultiplier;
     }
 }
 
@@ -699,33 +786,139 @@ function enhanceMaterial(material) {
     }
 }
 
+// --- Blinking Material Helpers ---
+/**
+ * Sucht im gegebenen Objekt (und seinen Kindern) nach Materialien mit dem gegebenen Namen
+ * und fügt diese der blinkingMaterials-Liste hinzu.
+ * Name-Vergleich nutzt material.name (falls vorhanden) und auch material.userData.nameFallback (falls gesetzt).
+ */
+function collectAndStartBlinkingByName(rootObject, materialName) {
+    const found = [];
+    rootObject.traverse(child => {
+        if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+                child.material.forEach(m => {
+                    if (m && (m.name === materialName || (m.userData && m.userData.name === materialName))) {
+                        addBlinkingMaterial(m);
+                        found.push(m);
+                    }
+                });
+            } else {
+                const m = child.material;
+                if (m && (m.name === materialName || (m.userData && m.userData.name === materialName))) {
+                    addBlinkingMaterial(m);
+                    found.push(m);
+                }
+            }
+        }
+    });
+
+    if (found.length === 0) {
+        rootObject.traverse(child => {
+            if (child.isMesh && child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(m => {
+                        if (m && m.name && m.name.includes(materialName)) addBlinkingMaterial(m);
+                    });
+                } else {
+                    const m = child.material;
+                    if (m && m.name && m.name.includes(materialName)) addBlinkingMaterial(m);
+                }
+            }
+        });
+    }
+
+    // Falls immer noch nichts gefunden: logge es (du kannst das entfernen)
+    if (blinkingMaterials.length === 0) {
+        console.warn(`Kein Material mit Namen "${materialName}" gefunden.`);
+    } else {
+        console.log(`Blinkende Materialien gefunden:`, blinkingMaterials.map(m => m.name || m.uuid));
+    }
+}
+
+function addBlinkingMaterial(mat) {
+    if (!mat) return;
+    if (!mat.userData) mat.userData = {};
+    // Stelle sicher, dass baseEmissive gesetzt ist
+    if (!mat.userData.baseEmissive) {
+        mat.userData.baseEmissive = (mat.color ? mat.color.clone() : new THREE.Color(0x000000));
+        mat.emissive = mat.userData.baseEmissive.clone();
+    }
+    // Standard intensity falls nicht vorhanden
+    if (typeof mat.userData.baseEmissiveIntensity === 'undefined') {
+        mat.userData.baseEmissiveIntensity = (typeof mat.emissiveIntensity !== 'undefined') ? mat.emissiveIntensity : blinkingConfig.baseMultiplier;
+    }
+    // Vermeide doppelte Einträge
+    if (!blinkingMaterials.includes(mat)) blinkingMaterials.push(mat);
+}
+
+/**
+ * Optional: öffentliche Funktion, um ein Material später per Name zu starten
+ */
+function startBlinkingMaterialByName(materialName) {
+    collectAndStartBlinkingByName(scene, materialName);
+}
+
+/**
+ * Optional: stoppe das Blinken eines Materials
+ */
+function stopBlinkingMaterial(mat) {
+    const idx = blinkingMaterials.indexOf(mat);
+    if (idx !== -1) blinkingMaterials.splice(idx, 1);
+}
+
 // --- Animate ---
 function animate(time) {
     const delta = clock.getDelta();
 
     if (cameraAnimation) cameraAnimation(delta);
 
-    const t = time * 0.005;
-    const pulse = 1.0 + 0.5 * Math.sin(t);
+    // Zeit für Puls (in Sekunden)
+    const t = clock.getElapsedTime();
+    // pulse zwischen 0..1 im Sinus
+    const pulse = 0.5 * (1 + Math.sin(t * blinkingConfig.speed * Math.PI * 2)); // 0..1
+    const intensityMultiplier = 1.0 + blinkingConfig.amplitude * (pulse - 0.5) * 2; // schwankt etwa um 1
 
+    // Anwenden auf alle blinkingMaterials
+    if (blinkingMaterials.length > 0) {
+        blinkingMaterials.forEach(m => {
+            if (!m) return;
+            // Basiswert
+            const base = (m.userData && typeof m.userData.baseEmissiveIntensity !== 'undefined') ? m.userData.baseEmissiveIntensity : blinkingConfig.baseMultiplier;
+            // Setze emissive (Farbe) falls nicht gesetzt
+            if (!m.emissive && m.userData && m.userData.baseEmissive) {
+                m.emissive = m.userData.baseEmissive.clone();
+            } else if (!m.emissive && m.color) {
+                m.emissive = m.color.clone();
+            }
+            // Aktualisiere intensity
+            m.emissiveIntensity = Math.max(0, base * intensityMultiplier);
+            // Falls du einen zusätzlichen, sichtbaren Leuchteffekt brauchst, kannst du hier die emissive-Farbe aufleuchten lassen:
+            // const blinkColor = m.userData.baseEmissive.clone().multiplyScalar(1.0 + 0.5 * pulse);
+            // m.emissive.copy(blinkColor);
+        });
+    }
+
+    // Zusätzlich: falls ramBlinking aktiv ist, blinke RAM-Gruppen (wie vorher)
     if (ramBlinking) {
+        const ramPulse = 1.0 + 0.5 * Math.sin(time * 0.005);
         ramGroups.forEach(group => {
             if (!group) return;
             group.forEach(obj => {
                 if (!obj || !obj.material) return;
                 if (Array.isArray(obj.material)) {
                     obj.material.forEach(m => {
-                        if (m.userData.baseEmissive) {
+                        if (m.userData && m.userData.baseEmissive) {
                             m.emissive.copy(m.userData.baseEmissive);
-                            m.emissiveIntensity = pulse;
+                            m.emissiveIntensity = ramPulse;
                         }
                     });
-                }else {
-    if (obj.material.userData.baseEmissive) {
-        obj.material.emissive.copy(obj.material.userData.baseEmissive);
-        obj.material.emissiveIntensity = pulse;
-    }
-}
+                } else {
+                    if (obj.material.userData && obj.material.userData.baseEmissive) {
+                        obj.material.emissive.copy(obj.material.userData.baseEmissive);
+                        obj.material.emissiveIntensity = ramPulse;
+                    }
+                }
             });
         });
     }
@@ -743,36 +936,40 @@ function loadPerc(e) {
     const dummyPerc = scene.getObjectByName('PERCDUMMY');
     if (!dummyPerc) return;
 
+    // altes PERC entfernen
     if (currentPerc) {
         scene.remove(currentPerc);
         currentPerc.traverse(child => {
             if (child.isMesh) {
                 child.geometry.dispose();
                 if (child.material) {
-                    if (Array.isArray(child.material)) child.material.forEach(mat => mat.dispose());
-                    else child.material.dispose();
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(mat => mat.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
                 }
             }
         });
         currentPerc = null;
     }
 
+    // Kein PERC ausgewählt
     if (!percIndex) {
-        // Kein PERC ausgewählt
         dummyPerc.visible = true;
         if (percLabel) {
             percLabel.spinner.style.display = 'none';
-            percLabel.warning.style.display = 'flex'; // Warnung sichtbar
+            percLabel.warning.style.display = 'flex';
             percLabel.text.textContent = 'Kein PERC ausgewählt';
         }
         return;
     }
 
-    // PERC laden
+    // Ladeprozess starten
     dummyPerc.visible = false;
     if (percLabel) {
         percLabel.spinner.style.display = 'block';
-        percLabel.warning.style.display = 'none'; // Warnung ausblenden
+        percLabel.warning.style.display = 'none';
         percLabel.text.textContent = `PERC Controller ${percIndex}`;
     }
 
@@ -782,14 +979,21 @@ function loadPerc(e) {
     const loaderGLB = new GLTFLoader();
     loaderGLB.setPath(path).load(glbFile, gltf => {
         const perc = gltf.scene;
-        perc.position.set(.08, .015, -.09);
+        perc.position.set(0.08, 0.015, -0.09);
         perc.rotation.copy(dummyPerc.rotation);
         perc.scale.set(0.025, 0.025, 0.025);
 
         perc.traverse(child => {
-            if (child.isMesh) {
-                makeEmissive(child.material);
-                enhanceMaterial(child.material);
+            if (child.isMesh && child.material) {
+                // ✅ Nur Eigenschaften ergänzen, NICHT ersetzen
+                if (child.material.isMeshStandardMaterial || child.material.isMeshPhysicalMaterial) {
+                    // Leichte Emission hinzufügen (ohne Texturen zu überschreiben)
+                    child.material.emissive = new THREE.Color(0x222222);
+                    child.material.emissiveIntensity = 0.2;
+
+                    // Optionale Optimierungen für PBR
+                    child.material.needsUpdate = true;
+                }
             }
         });
 
